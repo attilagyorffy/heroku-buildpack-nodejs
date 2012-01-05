@@ -65,4 +65,4 @@ Workflow:
 * You should see:
 
         -----> Vendoring node 0.6.6
-        -----> Installing dependencies with npm 1.1.0-alpha-6
+        -----> Installing dependencies with npm 1.1.0-beta-10
