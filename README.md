@@ -19,8 +19,8 @@ Example usage:
     -----> Heroku receiving push
     -----> Fetching custom buildpack
     -----> Node.js app detected
-    -----> Vendoring node 0.6.6
-    -----> Installing dependencies with npm 1.1.0-alpha-6
+    -----> Vendoring node 0.6.7
+    -----> Installing dependencies with npm 1.1.0-beta-10
            express@2.1.0 ./node_modules/express
            ├── mime@1.2.2
            ├── qs@0.3.1
@@ -52,11 +52,11 @@ Workflow:
         $ s3 create $S3_BUCKET
 * Customise your version of Node that you want to use by running `./support/package_node` with the desired version of Node. The script will compile Node and push the binaries ready onto your S3 bucket:
 
-        $ ./support/package_node 0.6.6
+        $ ./support/package_node 0.6.7
 
 * Open `bin/compile` in your editor, and change the following lines:
 
-        NODE_VERSION="0.6.6"
+        NODE_VERSION="0.6.7"
 		S3_BUCKET=zzz
 * Commit and push the changes to your buildpack to your Github fork
 * Create a test application that makes use of your custom buildpack and push to it:
@@ -64,5 +64,5 @@ Workflow:
         $ heroku create --buildpack <your-github-url>
 * You should see:
 
-        -----> Vendoring node 0.6.6
+        -----> Vendoring node 0.6.7
         -----> Installing dependencies with npm 1.1.0-beta-10
