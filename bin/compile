@@ -32,7 +32,7 @@ function resolve_versions() {
   args=""
   for version in $1; do args="${args} -v \"${version}\""; done
   for version in $2; do args="${args} -r \"${version}\""; done
-  eval $LP_DIR/vendor/node-semver/bin/semver ${args} | tail -n1
+  eval vendor/node-semver/bin/semver ${args} | tail -r | head -n1
 }
 
 # config
@@ -47,14 +47,6 @@ CACHE_DIR=$2
 LP_DIR=`cd $(dirname $0); cd ..; pwd`
 CACHE_STORE_DIR=$CACHE_DIR"/node_modules/$NPM_VERSION"
 CACHE_TARGET_DIR=$BUILD_DIR"/node_modules"
-
-# bootstrap node
-NODE_PACKAGE="http://${S3_BUCKET}.s3.amazonaws.com/nodejs-${DEFAULT_NODE_VERSION}.tgz"
-VENDORED_NODE="$(mktmpdir node)"
-echo "-----> Bootstraping Node.js"
-mkdir -p $VENDORED_NODE  && curl $NODE_PACKAGE -s -o -  | tar xzf - -C $VENDORED_NODE
-OLDPATH="$PATH"
-PATH="$VENDORED_NODE/bin:$PATH"
 
 # determine available versions
 NODEJS_VERSIONS=$(manifest_versions "nodejs")
@@ -83,7 +75,6 @@ else
     NODE_VERSION=${RESOLVED_NODE}
   fi
 fi
-
 echo "-----> Using Node.js version: ${NODE_VERSION}"
 
 # resolve npm version
@@ -93,15 +84,12 @@ else
   RESOLVED_NPM=$(resolve_versions "${NPM_VERSIONS}" "${REQUESTED_NPM_VERSION}")
 
   if [ "${RESOLVED_NPM}" == "" ]; then
-    error "Requested npm version: ${REQUESTED_NPM_VERSION} does not match available versions: ${NPMJS_VERSIONS}"
+    error "Requested Node.js version: ${REQUESTED_NPM_VERSION} does not match available versions: ${NPMJS_VERSIONS}"
   else
     NPM_VERSION=${RESOLVED_NPM}
   fi
 fi
 echo "-----> Using npm version: ${NPM_VERSION}"
-
-# reset path to undo bootstrapped node
-PATH="$OLDPATH"
 
 # s3 packages
 NODE_PACKAGE="http://${S3_BUCKET}.s3.amazonaws.com/nodejs-${NODE_VERSION}.tgz"
@@ -140,6 +128,7 @@ fi
 # install dependencies with npm
 echo "-----> Installing dependencies with npm"
 cd $BUILD_DIR
+HOME="$BUILD_DIR" $VENDORED_NODE/bin/node $VENDORED_NPM/cli.js prune 2>&1 | indent
 HOME="$BUILD_DIR" $VENDORED_NODE/bin/node $VENDORED_NPM/cli.js install 2>&1 | indent
 if [ "${PIPESTATUS[*]}" != "0 0" ]; then
   error "Failed to install dependencies with npm"
