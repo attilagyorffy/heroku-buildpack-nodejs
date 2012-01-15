@@ -4,6 +4,23 @@
 # fail fast
 set -e
 
+# debug
+# set -x
+
+# clean up leaking environment
+unset GIT_DIR
+
+# config
+SCONS_VERSION="1.2.0"
+S3_BUCKET="heroku-buildpack-nodejs"
+
+# parse and derive params
+BUILD_DIR=$1
+CACHE_DIR=$2
+LP_DIR=`cd $(dirname $0); cd ..; pwd`
+CACHE_STORE_DIR="$CACHE_DIR/node_modules/$NPM_VERSION"
+CACHE_TARGET_DIR="$BUILD_DIR/node_modules"
+
 function error() {
   echo " !     $*"
   exit 1
@@ -24,72 +41,88 @@ function indent() {
   esac
 }
 
+function run_npm() {
+  command="$1"
+
+  cd $BUILD_DIR
+  HOME="$BUILD_DIR" $VENDORED_NODE/bin/node $VENDORED_NPM/cli.js $command 2>&1 | indent
+
+  if [ "${PIPESTATUS[*]}" != "0 0" ]; then
+    echo " !     Failed to $command dependencies with npm"
+    exit 1
+  fi
+}
+
 function manifest_versions() {
   curl "http://${S3_BUCKET}.s3.amazonaws.com/manifest.${1}" -s -o - | tr -s '\n' ' '
 }
 
-function resolve_versions() {
-  args=""
-  for version in $1; do args="${args} -v \"${version}\""; done
-  for version in $2; do args="${args} -r \"${version}\""; done
-  eval vendor/node-semver/bin/semver ${args} | tail -r | head -n1
+function resolve_version() {
+  available_versions="$1"
+  requested_version="$2"
+  default_version="$3"
+
+  if [ "$2" == "" ]; then
+    echo $3
+  else
+    args=""
+    for version in $available_versions; do args="${args} -v \"${version}\""; done
+    for version in $requested_version; do args="${args} -r \"${version}\""; done
+    eval $bootstrap_node/bin/node $LP_DIR/vendor/node-semver/bin/semver ${args} | tail -n1
+  fi
 }
 
-# config
-DEFAULT_NODE_VERSION="0.4.7"
-DEFAULT_NPM_VERSION="1.0.94"
-SCONS_VERSION="1.2.0"
-S3_BUCKET="heroku-buildpack-nodejs"
-
-# parse and derive params
-BUILD_DIR=$1
-CACHE_DIR=$2
-LP_DIR=`cd $(dirname $0); cd ..; pwd`
-CACHE_STORE_DIR=$CACHE_DIR"/node_modules/$NPM_VERSION"
-CACHE_TARGET_DIR=$BUILD_DIR"/node_modules"
-
-# determine available versions
-NODEJS_VERSIONS=$(manifest_versions "nodejs")
-NPM_VERSIONS=$(manifest_versions "npm")
-
-# determine requested versions
-engines=$(cat $BUILD_DIR/package.json | $LP_DIR/vendor/json/json engines 2>&1)
-
-if [ $? == 0 ] && [ "$engines" != "" ]; then
-  REQUESTED_NODE_VERSION=$(cat $BUILD_DIR/package.json | $LP_DIR/vendor/json/json engines.node)
-  REQUESTED_NPM_VERSION=$(cat $BUILD_DIR/package.json | $LP_DIR/vendor/json/json engines.npm 2>&1)
-else
-  REQUESTED_NODE_VERSION=""
-  REQUESTED_NPM_VERSION=""
-fi
-
-# resolve node version
-if [ "${REQUESTED_NODE_VERSION}" == "" ]; then
-  NODE_VERSION=${DEFAULT_NODE_VERSION}
-else
-  RESOLVED_NODE=$(resolve_versions "${NODEJS_VERSIONS}" "${REQUESTED_NODE_VERSION}")
-
-  if [ "${RESOLVED_NODE}" == "" ]; then
-    error "Requested Node.js version: ${REQUESTED_NODE_VERSION} does not match available versions: ${NODEJS_VERSIONS}"
-  else
-    NODE_VERSION=${RESOLVED_NODE}
+function package_engine_version() {
+  version=$(cat $BUILD_DIR/package.json | $bootstrap_node/bin/node $LP_DIR/vendor/json/json engines.$1)
+  if [ $? == 0 ]; then
+    echo $version
   fi
-fi
-echo "-----> Using Node.js version: ${NODE_VERSION}"
+}
 
-# resolve npm version
-if [ "${REQUESTED_NPM_VERSION}" == "" ]; then
-  NPM_VERSION=${DEFAULT_NPM_VERSION}
-else
-  RESOLVED_NPM=$(resolve_versions "${NPM_VERSIONS}" "${REQUESTED_NPM_VERSION}")
+function package_resolve_version() {
+  engine="$1"
+  resolved_version=$(resolve_version "${engine_versions[$engine]}" "${engine_requests[$engine]}" "${engine_defaults[$engine]}")
 
-  if [ "${RESOLVED_NPM}" == "" ]; then
-    error "Requested Node.js version: ${REQUESTED_NPM_VERSION} does not match available versions: ${NPMJS_VERSIONS}"
+  if [ "${resolved_version}" == "" ]; then
+    error "Requested engine $engine version ${engine_requests[$engine]} does not match available versions: ${engine_versions[$engine]}"
   else
-    NPM_VERSION=${RESOLVED_NPM}
+    echo $resolved_version
   fi
-fi
-echo "-----> Using npm version: ${NPM_VERSION}"
+}
+
+function package_download() {
+  engine="$1"
+  version="$2"
+  location="$3"
+
+  mkdir -p $location
+  package="http://${S3_BUCKET}.s3.amazonaws.com/$engine-$version.tgz"
+  curl $package -s -o - | tar xzf - -C $location
+}
+
+bootstrap_node=$(mktmpdir bootstrap_node)
+package_download "nodejs" "0.4.7" $bootstrap_node
+
+# make some associative arrays
+declare -A engine_versions
+declare -A engine_defaults
+declare -A engine_requests
+
+engine_defaults["node"]="0.4.7"
+engine_defaults["npm"]="1.0.94"
+
+engine_versions["node"]=$(manifest_versions "nodejs")
+engine_requests["node"]=$(package_engine_version "node")
+
+engine_versions["npm"]=$(manifest_versions "npm")
+engine_requests["npm"]=$(package_engine_version "npm")
+
+echo "-----> Resolving engine versions"
+NODE_VERSION=$(package_resolve_version "node")
+echo "Using Node.js version: ${NODE_VERSION}" | indent
+
+NPM_VERSION=$(package_resolve_version "npm")
+echo "Using npm version: ${NPM_VERSION}" | indent
 
 # s3 packages
 NODE_PACKAGE="http://${S3_BUCKET}.s3.amazonaws.com/nodejs-${NODE_VERSION}.tgz"
@@ -103,9 +136,9 @@ VENDORED_SCONS="$(mktmpdir scons)"
 
 # download and unpack packages
 echo "-----> Fetching Node.js binaries"
-mkdir -p $VENDORED_NODE  && curl $NODE_PACKAGE -s -o -  | tar xzf - -C $VENDORED_NODE
-mkdir -p $VENDORED_NPM   && curl $NPM_PACKAGE -s -o -   | tar xzf - -C $VENDORED_NPM
-mkdir -p $VENDORED_SCONS && curl $SCONS_PACKAGE -s -o - | tar xzf - -C $VENDORED_SCONS
+package_download "nodejs" "${NODE_VERSION}" "${VENDORED_NODE}"
+package_download "npm" "${NPM_VERSION}" "${VENDORED_NPM}"
+package_download "scons" "${SCONS_VERSION}" "${VENDORED_SCONS}"
 
 # vendor node into the slug
 PATH="$BUILD_DIR/bin:$PATH"
@@ -120,21 +153,32 @@ export CPATH="$INCLUDE_PATH"
 export CPPPATH="$INCLUDE_PATH"
 
 # unpack existing cache
-rm -rf $CACHE_TARGET_DIR
 if [ -d $CACHE_STORE_DIR ]; then
-  cp -a $CACHE_STORE_DIR $CACHE_TARGET_DIR
+
+  # generate a place to put node_modules
+  TEMP_NODE_MODULES_DIR=$(mktmpdir node_modules)
+
+  # move existing node_modules out of the way
+  if [ -d $CACHE_TARGET_DIR ]; then
+    mv $CACHE_TARGET_DIR $TEMP_NODE_MODULES_DIR/
+  fi
+
+  # copy the cached node_modules in
+  mkdir -p $CACHE_TARGET_DIR
+  cp -R $CACHE_STORE_DIR/* $CACHE_TARGET_DIR/
+
+  # move existing node_modules back into place
+  if [ -d $TEMP_NODE_MODULES_DIR/node_modules ]; then
+    cp -R $TEMP_NODE_MODULES_DIR/node_modules/* $CACHE_TARGET_DIR/
+  fi
+
 fi
 
 # install dependencies with npm
 echo "-----> Installing dependencies with npm"
-cd $BUILD_DIR
-HOME="$BUILD_DIR" $VENDORED_NODE/bin/node $VENDORED_NPM/cli.js prune 2>&1 | indent
-HOME="$BUILD_DIR" $VENDORED_NODE/bin/node $VENDORED_NPM/cli.js install 2>&1 | indent
-if [ "${PIPESTATUS[*]}" != "0 0" ]; then
-  error "Failed to install dependencies with npm"
-else
-  echo "       Dependencies installed"
-fi
+run_npm "install"
+run_npm "rebuild"
+echo "Dependencies installed" | indent
 
 # repack cache with new assets
 if [ -d $CACHE_TARGET_DIR ]; then
