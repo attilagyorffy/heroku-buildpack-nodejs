@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 # bin/compile <build-dir> <cache-dir>
 
-# fail fast
-set -e
-
 mktmpdir() {
   dir=$(mktemp -t node-$1-XXXX)
   rm -rf $dir
@@ -19,6 +16,16 @@ function indent() {
   esac
 }
 
+run_npm() {
+  command="$1"
+  HOME="$BUILD_DIR" $VENDORED_NODE/bin/node $VENDORED_NPM/cli.js $command 2>&1 | indent
+
+  if [ "${PIPESTATUS[*]}" != "0 0" ]; then
+    echo " !     Failed to $command dependencies with npm"
+    exit 1
+  fi
+}
+
 # clean up leaking environment
 unset GIT_DIR
 
@@ -32,8 +39,8 @@ S3_BUCKET="eclm-heroku-buildpack"
 BUILD_DIR=$1
 CACHE_DIR=$2
 LP_DIR=`cd $(dirname $0); cd ..; pwd`
-CACHE_STORE_DIR=$CACHE_DIR"/node_modules/$NPM_VERSION"
-CACHE_TARGET_DIR=$BUILD_DIR"/node_modules"
+CACHE_STORE_DIR="$CACHE_DIR/node_modules/$NPM_VERSION"
+CACHE_TARGET_DIR="$BUILD_DIR/node_modules"
 
 # s3 packages
 NODE_PACKAGE="http://${S3_BUCKET}.s3.amazonaws.com/nodejs-${NODE_VERSION}.tgz"
@@ -64,22 +71,35 @@ export CPATH="$INCLUDE_PATH"
 export CPPPATH="$INCLUDE_PATH"
 
 # unpack existing cache
-rm -rf $CACHE_TARGET_DIR
 if [ -d $CACHE_STORE_DIR ]; then
-  cp -a $CACHE_STORE_DIR $CACHE_TARGET_DIR
+
+  # generate a place to put node_modules
+  TEMP_NODE_MODULES_DIR=$(mktmpdir node_modules)
+
+  # move existing node_modules out of the way
+  if [ -d $CACHE_TARGET_DIR ]; then
+    mv $CACHE_TARGET_DIR $TEMP_NODE_MODULES_DIR/
+  fi
+
+  # copy the cached node_modules in
+  mkdir -p $CACHE_TARGET_DIR
+  cp -R $CACHE_STORE_DIR/* $CACHE_TARGET_DIR/
+
+  # move existing node_modules back into place
+  if [ -d $TEMP_NODE_MODULES_DIR/node_modules ]; then
+    cp -R $TEMP_NODE_MODULES_DIR/node_modules/* $CACHE_TARGET_DIR/
+  fi
+
 fi
 
 # install dependencies with npm
 echo "-----> Installing dependencies with npm $NPM_VERSION"
+
 cd $BUILD_DIR
-HOME="$BUILD_DIR" $VENDORED_NODE/bin/node $VENDORED_NPM/cli.js prune 2>&1 | indent
-HOME="$BUILD_DIR" $VENDORED_NODE/bin/node $VENDORED_NPM/cli.js install 2>&1 | indent
-if [ "${PIPESTATUS[*]}" != "0 0" ]; then
-  echo " !     Failed to install dependencies with npm"
-  exit 1
-else
-  echo "       Dependencies installed"
-fi
+run_npm install
+run_npm rebuild
+
+echo "Dependencies installed" | indent
 
 # repack cache with new assets
 if [ -d $CACHE_TARGET_DIR ]; then
