@@ -20,7 +20,7 @@ Example usage:
     -----> Fetching custom buildpack
     -----> Node.js app detected
     -----> Vendoring node 0.6.8
-    -----> Installing dependencies with npm 1.1.0-beta-10
+    -----> Installing dependencies with npm 1.1.0-2
            express@2.1.0 ./node_modules/express
            ├── mime@1.2.2
            ├── qs@0.3.1
@@ -65,4 +65,4 @@ Workflow:
 * You should see:
 
         -----> Vendoring node 0.6.8
-        -----> Installing dependencies with npm 1.1.0-beta-10
+        -----> Installing dependencies with npm 1.1.0-2
