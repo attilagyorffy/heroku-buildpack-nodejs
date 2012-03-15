@@ -30,7 +30,7 @@ run_npm() {
 unset GIT_DIR
 
 # config
-NODE_VERSION="0.6.12"
+NODE_VERSION="0.6.13"
 NPM_VERSION="1.1.0-2"
 SCONS_VERSION="1.2.0"
 S3_BUCKET="eclm-heroku-buildpack"
