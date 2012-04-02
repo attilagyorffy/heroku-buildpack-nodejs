@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Heroku Node.js Buildpack by liquid</title>
+    
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>Heroku Node.js Buildpack</h1>
+        <p>A fork of the original Heroku Node build pack that is kept up to date with the latest stable releases of Node.</p>
+        <p class="view"><a href="https://github.com/liquid/heroku-buildpack-nodejs">View the Project on GitHub <small>liquid/heroku-buildpack-nodejs</small></a></p>
+        <ul>
+          <li><a href="https://github.com/liquid/heroku-buildpack-nodejs/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/liquid/heroku-buildpack-nodejs/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/liquid/heroku-buildpack-nodejs">Fork On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <h1>Heroku buildpack: Node.js</h1>
+
+<p>This is a custom Heroku buildpack for Node.js applications that run on the <a href="http://devcenter.heroku.com/articles/cedar">Cedar</a> runtime stack on Heroku.
+It uses <a href="http://npmjs.org/">NPM</a> and <a href="http://www.scons.org/">SCons</a>.</p>
+
+<h2>Quick start</h2>
+
+<p>Example usage:</p>
+
+<pre><code>$ ls
+Procfile  package.json  web.js
+
+$ heroku create --stack cedar --buildpack <a href="http://github.com/liquid/heroku-buildpack-nodejs.git">http://github.com/liquid/heroku-buildpack-nodejs.git</a>
+
+$ git push heroku master
+...
+-----&gt; Heroku receiving push
+-----&gt; Fetching custom buildpack
+-----&gt; Node.js app detected
+-----&gt; Vendoring node 0.6.13
+-----&gt; Installing dependencies with npm 1.1.0-2
+       express@2.1.0 ./node_modules/express
+       ├── mime@1.2.2
+       ├── qs@0.3.1
+       └── connect@1.6.2
+       Dependencies installed
+</code></pre>
+
+<p>The buildpack will detect your app as Node.js if it has the file <code>package.json</code> in the root.  It will use NPM to install your dependencies, and vendors a version of the Node.js runtime into your slug.  The <code>node_modules</code> directory will be cached between builds to allow for faster NPM install time.</p>
+
+<h2>Customization</h2>
+
+<p>You can create your own buildpack in order to use different versions of Node.js and/or NPM. To change the vendored binaries for Node.js, NPM, and SCons, use the helper scripts in the <code>support/</code> subdirectory.</p>
+
+<p>You are going to need the following:</p>
+
+<ul>
+<li>An S3 enabled AWS account to store your binaries in.</li>
+<li>Your application must use NPM to manage dependencies. (See <code>package.json</code> on the <a href="http://devcenter.heroku.com/articles/node-js#declare_dependencies_with_npm">Heroku Dev Center</a>).</li>
+<li>Obviously a Heroku user account. <a href="https://api.heroku.com/signup">Signup is free and instant</a>.</li>
+</ul><p>Workflow:</p>
+
+<ul>
+<li>Fork this buildpack on Github and clone it to somewhere in order to make changes to it</li>
+<li>
+<p>Set the nexessary environment variables in your shell:</p>
+
+<pre><code>$ export AWS_ID="YOUR-AWS-ID" AWS_SECRET="YOUR-AWS-SECRET" S3_BUCKET="YOUR-S3BUCKET-NAME"
+</code></pre>
+</li>
+<li>
+<p>Create your S3 bucket (in case it doesn't exist yet):</p>
+
+<pre><code>$ s3 create $S3_BUCKET
+</code></pre>
+</li>
+<li>
+<p>Customise your version of Node that you want to use by running <code>./support/package_node</code> with the desired version of Node. The script will compile Node and push the binaries ready onto your S3 bucket:</p>
+
+<pre><code>$ ./support/package_node 0.6.13
+</code></pre>
+</li>
+<li>
+<p>Open <code>bin/compile</code> in your editor, and change the following lines:</p>
+
+<pre><code>NODE_VERSION="0.6.13"
+S3_BUCKET=zzz
+</code></pre>
+</li>
+<li><p>Commit and push the changes to your buildpack to your Github fork</p></li>
+<li>
+<p>Create a test application that makes use of your custom buildpack and push to it:</p>
+
+<pre><code>$ heroku create --buildpack &lt;your-github-url&gt;
+</code></pre>
+</li>
+<li>
+<p>You should see:</p>
+
+<pre><code>-----&gt; Vendoring node 0.6.13
+-----&gt; Installing dependencies with npm 1.1.0-2
+</code></pre>
+</li>
+</ul>
+      </section>
+      <footer>
+        <p>This project is maintained by <a href="https://github.com/liquid">liquid</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><!--<![endif]-->
+  </body>
+</html>
