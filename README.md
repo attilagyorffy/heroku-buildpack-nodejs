@@ -66,3 +66,6 @@ Workflow:
 
         -----> Vendoring node 0.6.13
         -----> Installing dependencies with npm 1.1.0-2
+
+[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/liquid/heroku-buildpack-nodejs/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
+
